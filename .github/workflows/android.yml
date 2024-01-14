@@ -47,7 +47,7 @@ jobs:
         env:
           PLAYER_STORE_PASSWORD: ${{ secrets.PLAYER_STORE_PASSWORD }}
           PLAYER_KEY_PASSWORD: ${{ secrets.PLAYER_KEY_PASSWORD }}
-        run: ./gradlew ${{ env.main_project_module }}:bundleLatestUniversalFullRelease
+        run: ./gradlew app:bundleLatestUniversalFullRelease
       - name: Upload APK Release - ${{ env.repository_name }}
         uses: actions/upload-artifact@v4
         with:
