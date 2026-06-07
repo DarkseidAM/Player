@@ -25,6 +25,13 @@ android {
     base {
         archivesName = "Just.Player.v${defaultConfig.versionName}"
     }
+    // Native Dolby Vision 7→8.1 RPU conversion bridge (links prebuilt libdovi).
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false

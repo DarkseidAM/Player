@@ -41,6 +41,11 @@
     <string name="pref_file_access_auto">Auto</string>
     <string name="mediastore_empty">No video files found</string>
     <string name="stats_for_nerds">Stats for nerds</string>
+    <string name="pref_dv7to81">Dolby Vision 7→8.1 conversion</string>
+    <string name="pref_dv7to81_summary">Convert Dolby Vision profile 7 (dual-layer) to single-layer 8.1 so devices that support DV 8.1 but not profile 7 can play real Dolby Vision. MP4/TS only for now; MKV not yet supported.</string>
+    <string name="pref_dv7to81_auto">Auto (only when the device needs it)</string>
+    <string name="pref_dv7to81_on">Always on</string>
+    <string name="pref_dv7to81_off">Off</string>
     <string name="pref_advanced_header">Advanced</string>
     <string name="pref_buffer_forward">Forward cache</string>
     <string name="pref_buffer_forward_summary">How much to buffer ahead of the playback position (like mpv demuxer-max-bytes)</string>

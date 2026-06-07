@@ -84,6 +84,7 @@ import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
+import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.extractor.DefaultExtractorsFactory;
@@ -100,7 +101,11 @@ import androidx.media3.ui.TimeBar;
 
 import com.brouken.player.dtpv.DoubleTapPlayerView;
 import com.brouken.player.dtpv.youtube.YouTubeOverlay;
+import com.brouken.player.dv.DolbyVisionConversionConfig;
+import com.brouken.player.dv.DolbyVisionConversionStats;
+import com.brouken.player.dv.DolbyVisionExtractorsFactory;
 import com.brouken.player.dv.DolbyVisionUtils;
+import com.brouken.player.dv.DoviBridge;
 import com.getkeepsafe.taptargetview.TapTarget;
 import com.getkeepsafe.taptargetview.TapTargetView;
 import com.google.android.material.snackbar.Snackbar;
@@ -1243,6 +1248,17 @@ public class PlayerActivity extends Activity {
         DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
                 .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
                 .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE);
+
+        // Dolby Vision profile 7 → 8.1 conversion (MP4/TS). Wraps the extractors factory so the
+        // RPU NAL is rewritten and the enhancement layer dropped, letting DV-8.1-only devices
+        // (e.g. Xiaomi Pad 6) play real Dolby Vision instead of the HDR10 fallback.
+        DoviBridge.resetCounters();
+        DolbyVisionConversionStats.reset();
+        ExtractorsFactory effectiveExtractorsFactory = extractorsFactory;
+        if (dv7to81ConversionActive()) {
+            effectiveExtractorsFactory = new DolbyVisionExtractorsFactory(
+                    extractorsFactory, new DolbyVisionConversionConfig(true));
+        }
         @SuppressLint("WrongConstant") RenderersFactory renderersFactory = new DefaultRenderersFactory(this)
                 .setExtensionRendererMode(mPrefs.decoderPriority)
                 .setMapDV7ToHevc(mPrefs.mapDV7ToHevc);
@@ -1262,7 +1278,7 @@ public class PlayerActivity extends Activity {
         ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(this, renderersFactory)
                 .setTrackSelector(trackSelector)
                 .setLoadControl(loadControl)
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(this, extractorsFactory));
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(this, effectiveExtractorsFactory));
 
         if (haveMedia && isNetworkUri) {
             if (mPrefs.mediaUri.getScheme().toLowerCase().startsWith("http")) {
@@ -1272,7 +1288,7 @@ public class PlayerActivity extends Activity {
                     headers.put("Authorization", "Basic " + Base64.encodeToString(userInfo.getBytes(), Base64.NO_WRAP));
                     DefaultHttpDataSource.Factory defaultHttpDataSourceFactory = new DefaultHttpDataSource.Factory();
                     defaultHttpDataSourceFactory.setDefaultRequestProperties(headers);
-                    playerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(defaultHttpDataSourceFactory, extractorsFactory));
+                    playerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(defaultHttpDataSourceFactory, effectiveExtractorsFactory));
                 }
             }
         }
@@ -1461,21 +1477,31 @@ public class PlayerActivity extends Activity {
         statsForNerds.setProcessing(buildProcessingInfo());
     }
 
-    // "What the app is doing to the video to get it playing." Refined once DV7→8.1 lands.
+    /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
+    private boolean dv7to81ConversionActive() {
+        switch (mPrefs.dv7to81) {
+            case "on":
+                return true;
+            case "off":
+                return false;
+            default: // "auto"
+                return DolbyVisionUtils.shouldConvertProfile7();
+        }
+    }
+
+    // "What the app is doing to the video to get it playing."
     private String buildProcessingInfo() {
         final List<String> parts = new ArrayList<>();
-        final Format videoFormat = player != null ? player.getVideoFormat() : null;
-        final String codecs = (videoFormat != null && videoFormat.codecs != null)
-                ? videoFormat.codecs.toLowerCase(Locale.US) : "";
-        final boolean isDv7 = codecs.startsWith("dvhe.07") || codecs.startsWith("dvh1.07");
-        if (isDv7) {
-            if (mPrefs.mapDV7ToHevc) {
-                parts.add("DV7→HDR10 fallback");
-            } else if (DolbyVisionUtils.shouldConvertProfile7()) {
-                parts.add("DV7 (device needs 7→8.1 conversion — not yet implemented)");
-            } else {
-                parts.add("DV7 native");
-            }
+        final Integer convertedFrom = DolbyVisionConversionStats.getLastSourceProfile();
+        if (convertedFrom != null && DoviBridge.getConversionSuccessCount() > 0) {
+            final Integer mode = DolbyVisionConversionStats.getLastSelectedConversionMode();
+            parts.add("DV" + convertedFrom + "→8.1 converting"
+                    + (mode != null ? " (mode " + mode + ")" : "")
+                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs");
+        } else if (dv7to81ConversionActive()) {
+            parts.add("DV7→8.1 armed");
+        } else if (mPrefs.mapDV7ToHevc) {
+            parts.add("DV7→HDR10 fallback");
         }
         if (mPrefs.tunneling) {
             parts.add("tunneling");

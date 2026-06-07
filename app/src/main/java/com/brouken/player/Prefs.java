@@ -46,6 +46,7 @@ class Prefs {
     private static final String PREF_KEY_MAP_DV7 = "mapDV7ToHevc";
     private static final String PREF_KEY_BUFFER_FORWARD = "bufferForward";
     private static final String PREF_KEY_BUFFER_BACK = "bufferBack";
+    private static final String PREF_KEY_DV7_TO_81 = "dv7to81";
     private static final String PREF_KEY_LANGUAGE_AUDIO = "languageAudio";
     private static final String PREF_KEY_SUBTITLE_STYLE_EMBEDDED = "subtitleStyleEmbedded";
     private static final String PREF_KEY_SUBTITLE_STYLE_BOLD = "subtitleStyleBold";
@@ -83,6 +84,8 @@ class Prefs {
     // Forward / back buffer in seconds (mpv-style demuxer cache, duration-based).
     public int bufferForward = 50;
     public int bufferBack = 0;
+    // DV profile 7 → 8.1 conversion: "auto" (convert only when device needs it), "on", "off".
+    public String dv7to81 = "auto";
     public String languageAudio = TRACK_DEVICE;
     public boolean subtitleStyleEmbedded = true;
     public boolean subtitleStyleBold = false;
@@ -134,6 +137,7 @@ class Prefs {
         mapDV7ToHevc = mSharedPreferences.getBoolean(PREF_KEY_MAP_DV7, mapDV7ToHevc);
         bufferForward = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_FORWARD, String.valueOf(bufferForward)));
         bufferBack = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_BACK, String.valueOf(bufferBack)));
+        dv7to81 = mSharedPreferences.getString(PREF_KEY_DV7_TO_81, dv7to81);
         languageAudio = mSharedPreferences.getString(PREF_KEY_LANGUAGE_AUDIO, languageAudio);
         subtitleStyleEmbedded = mSharedPreferences.getBoolean(PREF_KEY_SUBTITLE_STYLE_EMBEDDED, subtitleStyleEmbedded);
         subtitleStyleBold = mSharedPreferences.getBoolean(PREF_KEY_SUBTITLE_STYLE_BOLD, subtitleStyleBold);

@@ -118,6 +118,15 @@
             app:summaryOff="@string/pref_map_dv7_off"
             app:title="@string/pref_map_dv7" />
 
+        <ListPreference
+            app:defaultValue="auto"
+            app:entries="@array/dv7to81_entries"
+            app:entryValues="@array/dv7to81_values"
+            app:key="dv7to81"
+            app:title="@string/pref_dv7to81"
+            app:summary="@string/pref_dv7to81_summary"
+            app:useSimpleSummaryProvider="false" />
+
     </PreferenceCategory>
 
 </PreferenceScreen>
