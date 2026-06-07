@@ -25,4 +25,46 @@
     <item>2</item>
     <item>0</item>
   </string-array>
+
+  <string-array name="buffer_forward_entries">
+    <item>15 s</item>
+    <item>30 s</item>
+    <item>50 s</item>
+    <item>120 s</item>
+    <item>300 s</item>
+  </string-array>
+
+  <string-array name="buffer_forward_values">
+    <item>15</item>
+    <item>30</item>
+    <item>50</item>
+    <item>120</item>
+    <item>300</item>
+  </string-array>
+
+  <string-array name="buffer_back_entries">
+    <item>@string/pref_buffer_back_off</item>
+    <item>30 s</item>
+    <item>60 s</item>
+    <item>120 s</item>
+  </string-array>
+
+  <string-array name="buffer_back_values">
+    <item>0</item>
+    <item>30</item>
+    <item>60</item>
+    <item>120</item>
+  </string-array>
+
+  <string-array name="dv7to81_entries">
+    <item>@string/pref_dv7to81_auto</item>
+    <item>@string/pref_dv7to81_on</item>
+    <item>@string/pref_dv7to81_off</item>
+  </string-array>
+
+  <string-array name="dv7to81_values">
+    <item>auto</item>
+    <item>on</item>
+    <item>off</item>
+  </string-array>
 </resources>

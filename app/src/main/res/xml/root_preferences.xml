@@ -69,6 +69,28 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/pref_advanced_header">
+
+        <ListPreference
+            app:defaultValue="50"
+            app:entries="@array/buffer_forward_entries"
+            app:entryValues="@array/buffer_forward_values"
+            app:key="bufferForward"
+            app:title="@string/pref_buffer_forward"
+            app:summary="@string/pref_buffer_forward_summary"
+            app:useSimpleSummaryProvider="false" />
+
+        <ListPreference
+            app:defaultValue="0"
+            app:entries="@array/buffer_back_entries"
+            app:entryValues="@array/buffer_back_values"
+            app:key="bufferBack"
+            app:title="@string/pref_buffer_back"
+            app:summary="@string/pref_buffer_back_summary"
+            app:useSimpleSummaryProvider="false" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/pref_dangerous_header">
 
         <Preference
@@ -95,6 +117,15 @@
             app:summaryOn="@string/pref_map_dv7_on"
             app:summaryOff="@string/pref_map_dv7_off"
             app:title="@string/pref_map_dv7" />
+
+        <ListPreference
+            app:defaultValue="auto"
+            app:entries="@array/dv7to81_entries"
+            app:entryValues="@array/dv7to81_values"
+            app:key="dv7to81"
+            app:title="@string/pref_dv7to81"
+            app:summary="@string/pref_dv7to81_summary"
+            app:useSimpleSummaryProvider="false" />
 
     </PreferenceCategory>
 

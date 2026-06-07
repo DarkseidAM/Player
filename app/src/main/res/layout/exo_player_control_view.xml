@@ -56,6 +56,11 @@
       <ImageButton android:id="@+id/exo_subtitle"
           style="@style/ExoStyledControls.Button.Bottom.CC"/>
 
+      <ImageButton android:id="@+id/exo_stats"
+          style="@style/ExoStyledControls.Button.Bottom"
+          android:src="@drawable/ic_stats"
+          android:contentDescription="@string/stats_for_nerds"/>
+
       <ImageButton android:id="@+id/exo_settings"
           style="@style/ExoStyledControls.Button.Bottom.Settings"/>
 

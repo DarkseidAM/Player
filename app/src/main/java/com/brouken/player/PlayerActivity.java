@@ -76,11 +76,15 @@ import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.SeekParameters;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
+import androidx.media3.extractor.ExtractorsFactory;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.extractor.DefaultExtractorsFactory;
@@ -97,6 +101,11 @@ import androidx.media3.ui.TimeBar;
 
 import com.brouken.player.dtpv.DoubleTapPlayerView;
 import com.brouken.player.dtpv.youtube.YouTubeOverlay;
+import com.brouken.player.dv.DolbyVisionConversionConfig;
+import com.brouken.player.dv.DolbyVisionConversionStats;
+import com.brouken.player.dv.DolbyVisionExtractorsFactory;
+import com.brouken.player.dv.DolbyVisionUtils;
+import com.brouken.player.dv.DoviBridge;
 import com.getkeepsafe.taptargetview.TapTarget;
 import com.getkeepsafe.taptargetview.TapTargetView;
 import com.google.android.material.snackbar.Snackbar;
@@ -161,7 +170,13 @@ public class PlayerActivity extends Activity {
     private ImageButton buttonAspectRatio;
     private ImageButton buttonRotation;
     private ImageButton exoSettings;
+    private ImageButton exoStats;
     private ImageButton exoPlayPause;
+    private TextView statsOverlay;
+    private StatsForNerds statsForNerds;
+    private boolean statsVisible;
+    private String videoDecoderName;
+    private String audioDecoderName;
     private ProgressBar loadingProgressBar;
     private PlayerControlView controlView;
     private CustomDefaultTimeBar timeBar;
@@ -594,9 +609,14 @@ public class PlayerActivity extends Activity {
 
         exoSettings = exoBasicControls.findViewById(R.id.exo_settings);
         exoBasicControls.removeView(exoSettings);
+        exoStats = exoBasicControls.findViewById(R.id.exo_stats);
+        exoBasicControls.removeView(exoStats);
         final ImageButton exoRepeat = exoBasicControls.findViewById(R.id.exo_repeat_toggle);
         exoBasicControls.removeView(exoRepeat);
         //exoBasicControls.setVisibility(View.GONE);
+
+        statsOverlay = findViewById(R.id.stats_overlay);
+        exoStats.setOnClickListener(view -> toggleStats());
 
         exoSettings.setOnLongClickListener(view -> {
             //askForScope(false, false);
@@ -628,6 +648,7 @@ public class PlayerActivity extends Activity {
         if (!isTvBox) {
             controls.addView(buttonRotation);
         }
+        controls.addView(exoStats);
         controls.addView(exoSettings);
 
         exoBasicControls.addView(horizontalScrollView);
@@ -1181,6 +1202,10 @@ public class PlayerActivity extends Activity {
 
         if (player != null) {
             player.removeListener(playerListener);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+                statsForNerds = null;
+            }
             player.clearMediaItems();
             player.release();
             player = null;
@@ -1223,13 +1248,43 @@ public class PlayerActivity extends Activity {
         DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory()
                 .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ENABLE_HDMV_DTS_AUDIO_STREAMS)
                 .setTsExtractorTimestampSearchBytes(1500 * TsExtractor.TS_PACKET_SIZE);
+
+        // Dolby Vision profile 7 → 8.1 conversion (MP4/TS). Wraps the extractors factory so the
+        // RPU NAL is rewritten and the enhancement layer dropped, letting DV-8.1-only devices
+        // (e.g. Xiaomi Pad 6) play real Dolby Vision instead of the HDR10 fallback.
+        DoviBridge.resetCounters();
+        DolbyVisionConversionStats.reset();
+        ExtractorsFactory effectiveExtractorsFactory = extractorsFactory;
+        if (dv7to81ConversionActive()) {
+            effectiveExtractorsFactory = new DolbyVisionExtractorsFactory(
+                    extractorsFactory, new DolbyVisionConversionConfig(true));
+        }
         @SuppressLint("WrongConstant") RenderersFactory renderersFactory = new DefaultRenderersFactory(this)
                 .setExtensionRendererMode(mPrefs.decoderPriority)
                 .setMapDV7ToHevc(mPrefs.mapDV7ToHevc);
 
+        // mpv-style cache: forward = max buffer ahead, back = retained already-played buffer (duration-based).
+        final int forwardBufferMs = mPrefs.bufferForward * 1000;
+        final int backBufferMs = mPrefs.bufferBack * 1000;
+        // DefaultLoadControl requires minBufferMs >= the playback/rebuffer thresholds and
+        // maxBufferMs >= minBufferMs. Clamp defensively so a small forward value can't crash build().
+        final int minBufferMs = Math.max(
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                Math.min(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, forwardBufferMs));
+        final int maxBufferMs = Math.max(forwardBufferMs, minBufferMs);
+        LoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        minBufferMs,
+                        maxBufferMs,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+                .setBackBuffer(backBufferMs, true)
+                .build();
+
         ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(this, renderersFactory)
                 .setTrackSelector(trackSelector)
-                .setMediaSourceFactory(new DefaultMediaSourceFactory(this, extractorsFactory));
+                .setLoadControl(loadControl)
+                .setMediaSourceFactory(new DefaultMediaSourceFactory(this, effectiveExtractorsFactory));
 
         if (haveMedia && isNetworkUri) {
             if (mPrefs.mediaUri.getScheme().toLowerCase().startsWith("http")) {
@@ -1239,7 +1294,7 @@ public class PlayerActivity extends Activity {
                     headers.put("Authorization", "Basic " + Base64.encodeToString(userInfo.getBytes(), Base64.NO_WRAP));
                     DefaultHttpDataSource.Factory defaultHttpDataSourceFactory = new DefaultHttpDataSource.Factory();
                     defaultHttpDataSourceFactory.setDefaultRequestProperties(headers);
-                    playerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(defaultHttpDataSourceFactory, extractorsFactory));
+                    playerBuilder.setMediaSourceFactory(new DefaultMediaSourceFactory(defaultHttpDataSourceFactory, effectiveExtractorsFactory));
                 }
             }
         }
@@ -1367,6 +1422,31 @@ public class PlayerActivity extends Activity {
         }
 
         player.addListener(playerListener);
+
+        videoDecoderName = null;
+        audioDecoderName = null;
+        if (statsOverlay != null) {
+            statsForNerds = new StatsForNerds(player, statsOverlay);
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onVideoDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                    videoDecoderName = decoderName;
+                    updateStatsContent();
+                }
+
+                @Override
+                public void onAudioDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                    audioDecoderName = decoderName;
+                    updateStatsContent();
+                }
+            });
+            if (statsVisible) {
+                statsOverlay.setVisibility(View.VISIBLE);
+                statsForNerds.start();
+                updateStatsContent();
+            }
+        }
+
         player.prepare();
 
         if (restorePlayState) {
@@ -1375,6 +1455,70 @@ public class PlayerActivity extends Activity {
             playerView.setControllerShowTimeoutMs(PlayerActivity.CONTROLLER_TIMEOUT);
             player.setPlayWhenReady(true);
         }
+    }
+
+    private void toggleStats() {
+        statsVisible = !statsVisible;
+        if (statsOverlay == null) {
+            return;
+        }
+        if (statsVisible) {
+            statsOverlay.setVisibility(View.VISIBLE);
+            if (statsForNerds != null) {
+                statsForNerds.start();
+                updateStatsContent();
+            }
+        } else {
+            statsOverlay.setVisibility(View.GONE);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+            }
+        }
+    }
+
+    private void updateStatsContent() {
+        if (statsForNerds == null) {
+            return;
+        }
+        statsForNerds.setVideoDecoder(videoDecoderName);
+        statsForNerds.setAudioDecoder(audioDecoderName);
+        statsForNerds.setProcessing(buildProcessingInfo());
+    }
+
+    /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
+    private boolean dv7to81ConversionActive() {
+        final String mode = mPrefs.dv7to81 != null ? mPrefs.dv7to81 : "auto";
+        switch (mode) {
+            case "on":
+                return true;
+            case "off":
+                return false;
+            default: // "auto"
+                return DolbyVisionUtils.shouldConvertProfile7();
+        }
+    }
+
+    // "What the app is doing to the video to get it playing."
+    private String buildProcessingInfo() {
+        final List<String> parts = new ArrayList<>();
+        final Integer convertedFrom = DolbyVisionConversionStats.getLastSourceProfile();
+        if (convertedFrom != null && DoviBridge.getConversionSuccessCount() > 0) {
+            final Integer mode = DolbyVisionConversionStats.getLastSelectedConversionMode();
+            parts.add("DV" + convertedFrom + "→8.1 converting"
+                    + (mode != null ? " (mode " + mode + ")" : "")
+                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs");
+        } else if (dv7to81ConversionActive()) {
+            parts.add("DV7→8.1 armed");
+        } else if (mPrefs.mapDV7ToHevc) {
+            parts.add("DV7→HDR10 fallback");
+        }
+        if (mPrefs.tunneling) {
+            parts.add("tunneling");
+        }
+        if (parts.isEmpty()) {
+            return "direct play (no conversion)";
+        }
+        return TextUtils.join(", ", parts);
     }
 
     private void savePlayer() {
@@ -1417,6 +1561,10 @@ public class PlayerActivity extends Activity {
                 restorePlayState = true;
             }
             player.removeListener(playerListener);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+                statsForNerds = null;
+            }
             player.clearMediaItems();
             player.release();
             player = null;
