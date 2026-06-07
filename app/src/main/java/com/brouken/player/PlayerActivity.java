@@ -76,11 +76,14 @@ import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlaybackException;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.SeekParameters;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.extractor.DefaultExtractorsFactory;
@@ -97,6 +100,7 @@ import androidx.media3.ui.TimeBar;
 
 import com.brouken.player.dtpv.DoubleTapPlayerView;
 import com.brouken.player.dtpv.youtube.YouTubeOverlay;
+import com.brouken.player.dv.DolbyVisionUtils;
 import com.getkeepsafe.taptargetview.TapTarget;
 import com.getkeepsafe.taptargetview.TapTargetView;
 import com.google.android.material.snackbar.Snackbar;
@@ -161,7 +165,13 @@ public class PlayerActivity extends Activity {
     private ImageButton buttonAspectRatio;
     private ImageButton buttonRotation;
     private ImageButton exoSettings;
+    private ImageButton exoStats;
     private ImageButton exoPlayPause;
+    private TextView statsOverlay;
+    private StatsForNerds statsForNerds;
+    private boolean statsVisible;
+    private String videoDecoderName;
+    private String audioDecoderName;
     private ProgressBar loadingProgressBar;
     private PlayerControlView controlView;
     private CustomDefaultTimeBar timeBar;
@@ -594,9 +604,14 @@ public class PlayerActivity extends Activity {
 
         exoSettings = exoBasicControls.findViewById(R.id.exo_settings);
         exoBasicControls.removeView(exoSettings);
+        exoStats = exoBasicControls.findViewById(R.id.exo_stats);
+        exoBasicControls.removeView(exoStats);
         final ImageButton exoRepeat = exoBasicControls.findViewById(R.id.exo_repeat_toggle);
         exoBasicControls.removeView(exoRepeat);
         //exoBasicControls.setVisibility(View.GONE);
+
+        statsOverlay = findViewById(R.id.stats_overlay);
+        exoStats.setOnClickListener(view -> toggleStats());
 
         exoSettings.setOnLongClickListener(view -> {
             //askForScope(false, false);
@@ -628,6 +643,7 @@ public class PlayerActivity extends Activity {
         if (!isTvBox) {
             controls.addView(buttonRotation);
         }
+        controls.addView(exoStats);
         controls.addView(exoSettings);
 
         exoBasicControls.addView(horizontalScrollView);
@@ -1181,6 +1197,10 @@ public class PlayerActivity extends Activity {
 
         if (player != null) {
             player.removeListener(playerListener);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+                statsForNerds = null;
+            }
             player.clearMediaItems();
             player.release();
             player = null;
@@ -1227,8 +1247,21 @@ public class PlayerActivity extends Activity {
                 .setExtensionRendererMode(mPrefs.decoderPriority)
                 .setMapDV7ToHevc(mPrefs.mapDV7ToHevc);
 
+        // mpv-style cache: forward = max buffer ahead, back = retained already-played buffer (duration-based).
+        final int forwardBufferMs = mPrefs.bufferForward * 1000;
+        final int backBufferMs = mPrefs.bufferBack * 1000;
+        LoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                        Math.min(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, forwardBufferMs),
+                        forwardBufferMs,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
+                .setBackBuffer(backBufferMs, true)
+                .build();
+
         ExoPlayer.Builder playerBuilder = new ExoPlayer.Builder(this, renderersFactory)
                 .setTrackSelector(trackSelector)
+                .setLoadControl(loadControl)
                 .setMediaSourceFactory(new DefaultMediaSourceFactory(this, extractorsFactory));
 
         if (haveMedia && isNetworkUri) {
@@ -1367,6 +1400,29 @@ public class PlayerActivity extends Activity {
         }
 
         player.addListener(playerListener);
+
+        videoDecoderName = null;
+        audioDecoderName = null;
+        statsForNerds = new StatsForNerds(player, statsOverlay);
+        player.addAnalyticsListener(new AnalyticsListener() {
+            @Override
+            public void onVideoDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                videoDecoderName = decoderName;
+                updateStatsContent();
+            }
+
+            @Override
+            public void onAudioDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                audioDecoderName = decoderName;
+                updateStatsContent();
+            }
+        });
+        if (statsVisible) {
+            statsOverlay.setVisibility(View.VISIBLE);
+            statsForNerds.start();
+            updateStatsContent();
+        }
+
         player.prepare();
 
         if (restorePlayState) {
@@ -1375,6 +1431,59 @@ public class PlayerActivity extends Activity {
             playerView.setControllerShowTimeoutMs(PlayerActivity.CONTROLLER_TIMEOUT);
             player.setPlayWhenReady(true);
         }
+    }
+
+    private void toggleStats() {
+        statsVisible = !statsVisible;
+        if (statsOverlay == null) {
+            return;
+        }
+        if (statsVisible) {
+            statsOverlay.setVisibility(View.VISIBLE);
+            if (statsForNerds != null) {
+                statsForNerds.start();
+                updateStatsContent();
+            }
+        } else {
+            statsOverlay.setVisibility(View.GONE);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+            }
+        }
+    }
+
+    private void updateStatsContent() {
+        if (statsForNerds == null) {
+            return;
+        }
+        statsForNerds.setVideoDecoder(videoDecoderName);
+        statsForNerds.setAudioDecoder(audioDecoderName);
+        statsForNerds.setProcessing(buildProcessingInfo());
+    }
+
+    // "What the app is doing to the video to get it playing." Refined once DV7→8.1 lands.
+    private String buildProcessingInfo() {
+        final List<String> parts = new ArrayList<>();
+        final Format videoFormat = player != null ? player.getVideoFormat() : null;
+        final String codecs = (videoFormat != null && videoFormat.codecs != null)
+                ? videoFormat.codecs.toLowerCase(Locale.US) : "";
+        final boolean isDv7 = codecs.startsWith("dvhe.07") || codecs.startsWith("dvh1.07");
+        if (isDv7) {
+            if (mPrefs.mapDV7ToHevc) {
+                parts.add("DV7→HDR10 fallback");
+            } else if (DolbyVisionUtils.shouldConvertProfile7()) {
+                parts.add("DV7 (device needs 7→8.1 conversion — not yet implemented)");
+            } else {
+                parts.add("DV7 native");
+            }
+        }
+        if (mPrefs.tunneling) {
+            parts.add("tunneling");
+        }
+        if (parts.isEmpty()) {
+            return "direct play (no conversion)";
+        }
+        return TextUtils.join(", ", parts);
     }
 
     private void savePlayer() {
@@ -1417,6 +1526,10 @@ public class PlayerActivity extends Activity {
                 restorePlayState = true;
             }
             player.removeListener(playerListener);
+            if (statsForNerds != null) {
+                statsForNerds.stop();
+                statsForNerds = null;
+            }
             player.clearMediaItems();
             player.release();
             player = null;

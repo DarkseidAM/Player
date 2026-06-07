@@ -14,4 +14,20 @@
         app:show_subtitle_button="true"
         app:dtpv_controller="@id/youtube_overlay" />
 
+    <TextView
+        android:id="@+id/stats_overlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="#A6000000"
+        android:padding="8dp"
+        android:fontFamily="monospace"
+        android:textColor="@color/exo_white"
+        android:textSize="12sp"
+        android:lineSpacingMultiplier="1.1"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone" />
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

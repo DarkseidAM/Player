@@ -44,6 +44,8 @@ class Prefs {
     private static final String PREF_KEY_FILE_ACCESS = "fileAccess";
     private static final String PREF_KEY_DECODER_PRIORITY = "decoderPriority";
     private static final String PREF_KEY_MAP_DV7 = "mapDV7ToHevc";
+    private static final String PREF_KEY_BUFFER_FORWARD = "bufferForward";
+    private static final String PREF_KEY_BUFFER_BACK = "bufferBack";
     private static final String PREF_KEY_LANGUAGE_AUDIO = "languageAudio";
     private static final String PREF_KEY_SUBTITLE_STYLE_EMBEDDED = "subtitleStyleEmbedded";
     private static final String PREF_KEY_SUBTITLE_STYLE_BOLD = "subtitleStyleBold";
@@ -78,6 +80,9 @@ class Prefs {
     public String fileAccess = "auto";
     public int decoderPriority = DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON;
     public boolean mapDV7ToHevc = false;
+    // Forward / back buffer in seconds (mpv-style demuxer cache, duration-based).
+    public int bufferForward = 50;
+    public int bufferBack = 0;
     public String languageAudio = TRACK_DEVICE;
     public boolean subtitleStyleEmbedded = true;
     public boolean subtitleStyleBold = false;
@@ -127,6 +132,8 @@ class Prefs {
         fileAccess = mSharedPreferences.getString(PREF_KEY_FILE_ACCESS, fileAccess);
         decoderPriority = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_DECODER_PRIORITY, String.valueOf(decoderPriority)));
         mapDV7ToHevc = mSharedPreferences.getBoolean(PREF_KEY_MAP_DV7, mapDV7ToHevc);
+        bufferForward = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_FORWARD, String.valueOf(bufferForward)));
+        bufferBack = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_BACK, String.valueOf(bufferBack)));
         languageAudio = mSharedPreferences.getString(PREF_KEY_LANGUAGE_AUDIO, languageAudio);
         subtitleStyleEmbedded = mSharedPreferences.getBoolean(PREF_KEY_SUBTITLE_STYLE_EMBEDDED, subtitleStyleEmbedded);
         subtitleStyleBold = mSharedPreferences.getBoolean(PREF_KEY_SUBTITLE_STYLE_BOLD, subtitleStyleBold);
