@@ -20,8 +20,8 @@ jobs:
 
       - run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > ${GITHUB_WORKSPACE}/keystore.jks
 
-      # GitHub-only release: build signed APKs (no Play Store AAB).
-      - run: ./gradlew assembleRelease
+      # GitHub-only release: build the signed universal APKs only (skip amazon/accrescent flavors).
+      - run: ./gradlew assembleLatestUniversalRelease assembleLegacyUniversalRelease
           -Pandroid.injected.signing.store.file=${GITHUB_WORKSPACE}/keystore.jks
           -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }}
           -Pandroid.injected.signing.key.alias=key
