@@ -42,7 +42,7 @@
     <string name="mediastore_empty">No video files found</string>
     <string name="stats_for_nerds">Stats for nerds</string>
     <string name="pref_dv7to81">Dolby Vision 7→8.1 conversion</string>
-    <string name="pref_dv7to81_summary">Convert Dolby Vision profile 7 (dual-layer) to single-layer 8.1 so devices that support DV 8.1 but not profile 7 can play real Dolby Vision. MP4/TS only for now; MKV not yet supported.</string>
+    <string name="pref_dv7to81_summary">Convert Dolby Vision profile 7 (dual-layer) to single-layer 8.1 so devices that support DV 8.1 but not profile 7 can play real Dolby Vision. Covers MKV, MP4 and TS.</string>
     <string name="pref_dv7to81_auto">Auto (only when the device needs it)</string>
     <string name="pref_dv7to81_on">Always on</string>
     <string name="pref_dv7to81_off">Off</string>

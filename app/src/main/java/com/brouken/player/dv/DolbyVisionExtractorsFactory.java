@@ -69,9 +69,20 @@ public final class DolbyVisionExtractorsFactory implements ExtractorsFactory {
         return extractors;
     }
 
+    private static final String STOCK_MATROSKA_EXTRACTOR = "androidx.media3.extractor.mkv.MatroskaExtractor";
+
     private Extractor wrap(Extractor extractor) {
         if (!config.active) {
             return extractor;
+        }
+        // Matroska: the DV7 RPU rides in BlockAdditional, which the stock MatroskaExtractor discards
+        // before any TrackOutput. Swap in the vendored extractor that surfaces the RPU through a
+        // transformer. (Vendored from NuvioTV; reconciled to media3 1.10.1.)
+        if (extractor.getClass().getName().equals(STOCK_MATROSKA_EXTRACTOR)) {
+            return new com.brouken.player.dv.dvmkv.MatroskaExtractor(
+                    new androidx.media3.extractor.text.DefaultSubtitleParserFactory(),
+                    /* flags= */ 0,
+                    new DolbyVisionMatroskaTransformer(config));
         }
         NalFormat nalFormat = nalFormatFor(extractor);
         if (nalFormat == null) {
