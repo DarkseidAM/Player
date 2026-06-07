@@ -1425,24 +1425,26 @@ public class PlayerActivity extends Activity {
 
         videoDecoderName = null;
         audioDecoderName = null;
-        statsForNerds = new StatsForNerds(player, statsOverlay);
-        player.addAnalyticsListener(new AnalyticsListener() {
-            @Override
-            public void onVideoDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
-                videoDecoderName = decoderName;
-                updateStatsContent();
-            }
+        if (statsOverlay != null) {
+            statsForNerds = new StatsForNerds(player, statsOverlay);
+            player.addAnalyticsListener(new AnalyticsListener() {
+                @Override
+                public void onVideoDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                    videoDecoderName = decoderName;
+                    updateStatsContent();
+                }
 
-            @Override
-            public void onAudioDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
-                audioDecoderName = decoderName;
+                @Override
+                public void onAudioDecoderInitialized(AnalyticsListener.EventTime eventTime, String decoderName, long initializedTimestampMs, long initializationDurationMs) {
+                    audioDecoderName = decoderName;
+                    updateStatsContent();
+                }
+            });
+            if (statsVisible) {
+                statsOverlay.setVisibility(View.VISIBLE);
+                statsForNerds.start();
                 updateStatsContent();
             }
-        });
-        if (statsVisible) {
-            statsOverlay.setVisibility(View.VISIBLE);
-            statsForNerds.start();
-            updateStatsContent();
         }
 
         player.prepare();
@@ -1485,7 +1487,8 @@ public class PlayerActivity extends Activity {
 
     /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
     private boolean dv7to81ConversionActive() {
-        switch (mPrefs.dv7to81) {
+        final String mode = mPrefs.dv7to81 != null ? mPrefs.dv7to81 : "auto";
+        switch (mode) {
             case "on":
                 return true;
             case "off":

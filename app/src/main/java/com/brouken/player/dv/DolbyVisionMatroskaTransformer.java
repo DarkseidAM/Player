@@ -92,13 +92,10 @@ public final class DolbyVisionMatroskaTransformer implements MatroskaExtractor.D
             return baseChanged ? finishScratch() : null;
         }
 
-        // `blockAdditionalData` is the value produced by onDolbyVisionBlockAdditionalData (already an
-        // 8.1 RPU). Re-running conversion is a no-op (libdovi returns null for non-DV7 input), so we
-        // fall back to the already-converted bytes.
-        byte[] convertedBlockAdditional = convertRpuNal(blockAdditionalData, mode);
-        if (convertedBlockAdditional == null) {
-            convertedBlockAdditional = blockAdditionalData;
-        }
+        // `blockAdditionalData` was already converted to an 8.1 RPU by onDolbyVisionBlockAdditionalData.
+        // Re-converting it here would be a wasted libdovi call on every frame (it would fail and fall
+        // back to these same bytes), so use it directly.
+        byte[] convertedBlockAdditional = blockAdditionalData;
         if (!baseChanged) {
             scratch.reset();
             scratch.write(sample, 0, sampleLength);

@@ -18,7 +18,7 @@ public final class DoviBridge {
     private static final String LIB_NAME = "dovi_bridge";
 
     private static final boolean NATIVE_LOADED = loadNativeLibrary();
-    private static Boolean conversionPathReady;
+    private static volatile Boolean conversionPathReady;
 
     private static final AtomicLong conversionCallCount = new AtomicLong(0L);
     private static final AtomicLong conversionSuccessCount = new AtomicLong(0L);
@@ -35,15 +35,22 @@ public final class DoviBridge {
         if (!NATIVE_LOADED) {
             return false;
         }
-        if (conversionPathReady == null) {
-            try {
-                conversionPathReady = nativeIsConversionPathReady();
-            } catch (Throwable t) {
-                Log.w(TAG, "isConversionPathReady failed: " + t.getMessage());
-                conversionPathReady = false;
+        Boolean ready = conversionPathReady;
+        if (ready == null) {
+            synchronized (DoviBridge.class) {
+                ready = conversionPathReady;
+                if (ready == null) {
+                    try {
+                        ready = nativeIsConversionPathReady();
+                    } catch (Throwable t) {
+                        Log.w(TAG, "isConversionPathReady failed: " + t.getMessage());
+                        ready = false;
+                    }
+                    conversionPathReady = ready;
+                }
             }
         }
-        return conversionPathReady;
+        return ready;
     }
 
     public static String getBridgeVersionOrNull() {
