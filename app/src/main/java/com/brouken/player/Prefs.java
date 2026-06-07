@@ -135,8 +135,16 @@ class Prefs {
         fileAccess = mSharedPreferences.getString(PREF_KEY_FILE_ACCESS, fileAccess);
         decoderPriority = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_DECODER_PRIORITY, String.valueOf(decoderPriority)));
         mapDV7ToHevc = mSharedPreferences.getBoolean(PREF_KEY_MAP_DV7, mapDV7ToHevc);
-        bufferForward = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_FORWARD, String.valueOf(bufferForward)));
-        bufferBack = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_BACK, String.valueOf(bufferBack)));
+        try {
+            bufferForward = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_FORWARD, String.valueOf(bufferForward)));
+        } catch (NumberFormatException ignored) {
+            // keep default
+        }
+        try {
+            bufferBack = Integer.parseInt(mSharedPreferences.getString(PREF_KEY_BUFFER_BACK, String.valueOf(bufferBack)));
+        } catch (NumberFormatException ignored) {
+            // keep default
+        }
         dv7to81 = mSharedPreferences.getString(PREF_KEY_DV7_TO_81, dv7to81);
         languageAudio = mSharedPreferences.getString(PREF_KEY_LANGUAGE_AUDIO, languageAudio);
         subtitleStyleEmbedded = mSharedPreferences.getBoolean(PREF_KEY_SUBTITLE_STYLE_EMBEDDED, subtitleStyleEmbedded);

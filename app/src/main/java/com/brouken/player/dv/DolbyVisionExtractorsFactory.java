@@ -214,22 +214,20 @@ public final class DolbyVisionExtractorsFactory implements ExtractorsFactory {
         private void ensurePendingCapacity(int extra) {
             int need = pendingLen + extra;
             if (pendingBuf.length < need) {
-                int newSize = pendingBuf.length == 0 ? 16 * 1024 : pendingBuf.length;
-                while (newSize < need) {
-                    newSize <<= 1;
-                }
-                pendingBuf = java.util.Arrays.copyOf(pendingBuf, newSize);
+                pendingBuf = java.util.Arrays.copyOf(pendingBuf, grow(pendingBuf.length, need));
             }
         }
 
         private void ensureInputScratch(int size) {
             if (inputScratch.length < size) {
-                int newSize = inputScratch.length == 0 ? 16 * 1024 : inputScratch.length;
-                while (newSize < size) {
-                    newSize <<= 1;
-                }
-                inputScratch = new byte[newSize];
+                inputScratch = new byte[grow(inputScratch.length, size)];
             }
+        }
+
+        // Doubles capacity but never overflows: falls back to the exact need if doubling would wrap.
+        private static int grow(int current, int need) {
+            int doubled = current == 0 ? 16 * 1024 : current * 2;
+            return (doubled < need) ? need : doubled;
         }
 
         private void outReset() {
@@ -239,11 +237,7 @@ public final class DolbyVisionExtractorsFactory implements ExtractorsFactory {
         private void outEnsureCapacity(int extra) {
             int need = outLen + extra;
             if (outBuf.length < need) {
-                int newSize = outBuf.length == 0 ? 16 * 1024 : outBuf.length;
-                while (newSize < need) {
-                    newSize <<= 1;
-                }
-                outBuf = java.util.Arrays.copyOf(outBuf, newSize);
+                outBuf = java.util.Arrays.copyOf(outBuf, grow(outBuf.length, need));
             }
         }
 
@@ -367,7 +361,8 @@ public final class DolbyVisionExtractorsFactory implements ExtractorsFactory {
                     nalSize = (nalSize << 8) | (sample[pos + i] & 0xFF);
                 }
                 int nalStart = pos + lengthFieldLength;
-                if (nalSize <= 0 || nalStart + nalSize > sampleLen) {
+                // Subtraction avoids integer overflow of nalStart + nalSize for crafted/huge lengths.
+                if (nalSize <= 0 || nalSize > sampleLen - nalStart) {
                     return -1;
                 }
                 int nalType = nalUnitTypeAt(sample, nalStart);

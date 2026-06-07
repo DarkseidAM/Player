@@ -1,5 +1,7 @@
 package com.brouken.player.dv;
 
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 import androidx.media3.common.util.ParsableByteArray;
 import androidx.media3.common.util.UnstableApi;
@@ -158,7 +160,8 @@ public final class DolbyVisionMatroskaTransformer implements MatroskaExtractor.D
                 return false;
             }
             offset += nalUnitLengthFieldLength;
-            if (offset + nalSize > sampleLength) {
+            // Subtraction avoids integer overflow of offset + nalSize for crafted/huge lengths.
+            if (nalSize > sampleLength - offset) {
                 return false;
             }
             int nalType = nalSize >= 1 ? nalUnitTypeAt(sample, offset) : -1;
@@ -229,7 +232,8 @@ public final class DolbyVisionMatroskaTransformer implements MatroskaExtractor.D
         }
         eight.append('8');
         parts[1] = eight.toString();
-        return String.join(".", parts);
+        // TextUtils.join (not String.join, which is API 26+ and crashes on minSdk 23 devices).
+        return TextUtils.join(".", parts);
     }
 
     private static Integer resolveProfile(@Nullable String codecs, @Nullable byte[] configBytes) {

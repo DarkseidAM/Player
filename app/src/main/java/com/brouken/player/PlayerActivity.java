@@ -1266,10 +1266,16 @@ public class PlayerActivity extends Activity {
         // mpv-style cache: forward = max buffer ahead, back = retained already-played buffer (duration-based).
         final int forwardBufferMs = mPrefs.bufferForward * 1000;
         final int backBufferMs = mPrefs.bufferBack * 1000;
+        // DefaultLoadControl requires minBufferMs >= the playback/rebuffer thresholds and
+        // maxBufferMs >= minBufferMs. Clamp defensively so a small forward value can't crash build().
+        final int minBufferMs = Math.max(
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                Math.min(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, forwardBufferMs));
+        final int maxBufferMs = Math.max(forwardBufferMs, minBufferMs);
         LoadControl loadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
-                        Math.min(DefaultLoadControl.DEFAULT_MIN_BUFFER_MS, forwardBufferMs),
-                        forwardBufferMs,
+                        minBufferMs,
+                        maxBufferMs,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
                         DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS)
                 .setBackBuffer(backBufferMs, true)
