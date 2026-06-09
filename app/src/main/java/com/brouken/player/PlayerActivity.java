@@ -1426,7 +1426,22 @@ public class PlayerActivity extends Activity {
 
         videoDecoderName = null;
         audioDecoderName = null;
-        mediaSizeBytes = computeMediaSizeBytes(mPrefs.mediaUri);
+        // Resolve media size off the main thread — content/SAF queries can be slow (cloud providers).
+        mediaSizeBytes = -1;
+        final Uri sizeUri = mPrefs.mediaUri;
+        if (sizeUri != null) {
+            new Thread(() -> {
+                final long size = computeMediaSizeBytes(sizeUri);
+                runOnUiThread(() -> {
+                    if (sizeUri.equals(mPrefs.mediaUri)) {
+                        mediaSizeBytes = size;
+                        if (statsForNerds != null) {
+                            statsForNerds.setMediaSizeBytes(size);
+                        }
+                    }
+                });
+            }, "media-size").start();
+        }
         if (statsOverlay != null) {
             statsForNerds = new StatsForNerds(player, statsOverlay);
             player.addAnalyticsListener(new AnalyticsListener() {
@@ -1519,17 +1534,34 @@ public class PlayerActivity extends Activity {
         if (uri == null) {
             return -1;
         }
-        try (android.os.ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
-            if (pfd != null) {
-                long sz = pfd.getStatSize();
-                if (sz > 0) {
-                    return sz;
+        final String scheme = uri.getScheme();
+        if ("content".equals(scheme)) {
+            // Cheap metadata query first; avoids forcing a download on cloud-backed providers.
+            try (android.database.Cursor cursor = getContentResolver().query(
+                    uri, new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                    if (idx != -1 && !cursor.isNull(idx)) {
+                        long sz = cursor.getLong(idx);
+                        if (sz > 0) {
+                            return sz;
+                        }
+                    }
                 }
+            } catch (Exception ignored) {
+                // fall through to fd
             }
-        } catch (Exception ignored) {
-            // fall through to file-scheme attempt
-        }
-        if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+            try (android.os.ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
+                if (pfd != null) {
+                    long sz = pfd.getStatSize();
+                    if (sz > 0) {
+                        return sz;
+                    }
+                }
+            } catch (Exception ignored) {
+                // give up
+            }
+        } else if ("file".equals(scheme) && uri.getPath() != null) {
             long len = new java.io.File(uri.getPath()).length();
             if (len > 0) {
                 return len;
