@@ -12,6 +12,7 @@ public final class DolbyVisionConversionStats {
     private static final AtomicLong codecStringRewriteCount = new AtomicLong(0L);
     private static volatile Integer lastSourceProfile;
     private static volatile Integer lastConversionMode;
+    private static volatile String lastSourceCodec;
 
     private DolbyVisionConversionStats() {
     }
@@ -20,6 +21,7 @@ public final class DolbyVisionConversionStats {
         codecStringRewriteCount.set(0L);
         lastSourceProfile = null;
         lastConversionMode = null;
+        lastSourceCodec = null;
     }
 
     /** Records the SOURCE DV profile (pre-conversion), e.g. 7. */
@@ -27,6 +29,17 @@ public final class DolbyVisionConversionStats {
         if (profile != null) {
             lastSourceProfile = profile;
         }
+    }
+
+    /** Records the SOURCE codec string (pre-conversion), e.g. "dvhe.07.06". */
+    public static void recordSourceCodec(String codecs) {
+        if (codecs != null && !codecs.isEmpty()) {
+            lastSourceCodec = codecs;
+        }
+    }
+
+    public static String getLastSourceCodec() {
+        return lastSourceCodec;
     }
 
     public static void recordConversionMode(int mode) {

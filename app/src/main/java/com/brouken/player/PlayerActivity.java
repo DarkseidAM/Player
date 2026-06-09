@@ -175,6 +175,14 @@ public class PlayerActivity extends Activity {
     private TextView statsOverlay;
     private StatsForNerds statsForNerds;
     private boolean statsVisible;
+    // Shared single daemon thread for media-size queries (no per-playback thread churn).
+    private static final java.util.concurrent.ExecutorService mediaSizeExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "media-size");
+                t.setDaemon(true);
+                return t;
+            });
+    private long mediaSizeBytes = -1;
     private String videoDecoderName;
     private String audioDecoderName;
     private ProgressBar loadingProgressBar;
@@ -1425,6 +1433,29 @@ public class PlayerActivity extends Activity {
 
         videoDecoderName = null;
         audioDecoderName = null;
+        // Resolve media size off the main thread — content/SAF queries can be slow (cloud providers).
+        // Use the application ContentResolver + a WeakReference so a slow query can't retain the Activity.
+        mediaSizeBytes = -1;
+        final Uri sizeUri = mPrefs.mediaUri;
+        if (sizeUri != null) {
+            final android.content.ContentResolver contentResolver = getApplicationContext().getContentResolver();
+            final java.lang.ref.WeakReference<PlayerActivity> activityRef = new java.lang.ref.WeakReference<>(this);
+            mediaSizeExecutor.execute(() -> {
+                final long size = computeMediaSizeBytes(contentResolver, sizeUri);
+                final PlayerActivity activity = activityRef.get();
+                if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {
+                    activity.runOnUiThread(() -> {
+                        final PlayerActivity act = activityRef.get();
+                        if (act != null && !act.isDestroyed() && sizeUri.equals(act.mPrefs.mediaUri)) {
+                            act.mediaSizeBytes = size;
+                            if (act.statsForNerds != null) {
+                                act.statsForNerds.setMediaSizeBytes(size);
+                            }
+                        }
+                    });
+                }
+            });
+        }
         if (statsOverlay != null) {
             statsForNerds = new StatsForNerds(player, statsOverlay);
             player.addAnalyticsListener(new AnalyticsListener() {
@@ -1483,6 +1514,12 @@ public class PlayerActivity extends Activity {
         statsForNerds.setVideoDecoder(videoDecoderName);
         statsForNerds.setAudioDecoder(audioDecoderName);
         statsForNerds.setProcessing(buildProcessingInfo());
+        statsForNerds.setTunneling(mPrefs.tunneling);
+        statsForNerds.setBackBufferSeconds(mPrefs.bufferBack);
+        statsForNerds.setMediaSizeBytes(mediaSizeBytes);
+        statsForNerds.setNetwork(Utils.isSupportedNetworkUri(mPrefs.mediaUri));
+        statsForNerds.setBandwidthMeter(
+                androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(this));
     }
 
     /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
@@ -1498,27 +1535,60 @@ public class PlayerActivity extends Activity {
         }
     }
 
-    // "What the app is doing to the video to get it playing."
+    // "What the app is actively doing to the stream." Null (suppressed) unless really converting.
     private String buildProcessingInfo() {
-        final List<String> parts = new ArrayList<>();
         final Integer convertedFrom = DolbyVisionConversionStats.getLastSourceProfile();
         if (convertedFrom != null && DoviBridge.getConversionSuccessCount() > 0) {
             final Integer mode = DolbyVisionConversionStats.getLastSelectedConversionMode();
-            parts.add("DV" + convertedFrom + "→8.1 converting"
+            return "DV" + convertedFrom + "→8.1 converting"
                     + (mode != null ? " (mode " + mode + ")" : "")
-                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs");
-        } else if (dv7to81ConversionActive()) {
-            parts.add("DV7→8.1 armed");
-        } else if (mPrefs.mapDV7ToHevc) {
-            parts.add("DV7→HDR10 fallback");
+                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs";
         }
-        if (mPrefs.tunneling) {
-            parts.add("tunneling");
+        return null;
+    }
+
+    private static long computeMediaSizeBytes(android.content.ContentResolver contentResolver, android.net.Uri uri) {
+        if (uri == null) {
+            return -1;
         }
-        if (parts.isEmpty()) {
-            return "direct play (no conversion)";
+        final String scheme = uri.getScheme();
+        if ("content".equals(scheme)) {
+            // Cheap metadata query first; avoids forcing a download on cloud-backed providers.
+            try (android.database.Cursor cursor = contentResolver.query(
+                    uri, new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    int idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                    if (idx != -1 && !cursor.isNull(idx)) {
+                        long sz = cursor.getLong(idx);
+                        if (sz > 0) {
+                            return sz;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // fall through to fd
+            }
+            try (android.os.ParcelFileDescriptor pfd = contentResolver.openFileDescriptor(uri, "r")) {
+                if (pfd != null) {
+                    long sz = pfd.getStatSize();
+                    if (sz > 0) {
+                        return sz;
+                    }
+                }
+            } catch (Exception ignored) {
+                // give up
+            }
+        } else if ("file".equals(scheme) && uri.getPath() != null) {
+            try {
+                long len = new java.io.File(uri.getPath()).length();
+                if (len > 0) {
+                    return len;
+                }
+            } catch (Exception ignored) {
+                // inaccessible path → fall through
+            }
         }
-        return TextUtils.join(", ", parts);
+        return -1;
     }
 
     private void savePlayer() {

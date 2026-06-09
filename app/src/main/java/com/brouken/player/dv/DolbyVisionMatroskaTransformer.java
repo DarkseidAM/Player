@@ -118,6 +118,7 @@ public final class DolbyVisionMatroskaTransformer implements MatroskaExtractor.D
             return null;
         }
         DolbyVisionConversionStats.recordSourceProfile(profile);
+        DolbyVisionConversionStats.recordSourceCodec(codecs);
         String normalized = normalizeDolbyVisionCodecString(codecs);
         if (normalized != null && !normalized.equals(codecs)) {
             DolbyVisionConversionStats.recordCodecStringRewrite();

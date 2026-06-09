@@ -23,7 +23,7 @@
         android:padding="8dp"
         android:fontFamily="monospace"
         android:textColor="@color/exo_white"
-        android:textSize="12sp"
+        android:textSize="11sp"
         android:lineSpacingMultiplier="1.1"
         android:clickable="false"
         android:focusable="false"
