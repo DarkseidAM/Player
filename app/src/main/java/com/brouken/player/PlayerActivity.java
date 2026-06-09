@@ -175,6 +175,7 @@ public class PlayerActivity extends Activity {
     private TextView statsOverlay;
     private StatsForNerds statsForNerds;
     private boolean statsVisible;
+    private long mediaSizeBytes = -1;
     private String videoDecoderName;
     private String audioDecoderName;
     private ProgressBar loadingProgressBar;
@@ -1425,6 +1426,7 @@ public class PlayerActivity extends Activity {
 
         videoDecoderName = null;
         audioDecoderName = null;
+        mediaSizeBytes = computeMediaSizeBytes(mPrefs.mediaUri);
         if (statsOverlay != null) {
             statsForNerds = new StatsForNerds(player, statsOverlay);
             player.addAnalyticsListener(new AnalyticsListener() {
@@ -1483,6 +1485,9 @@ public class PlayerActivity extends Activity {
         statsForNerds.setVideoDecoder(videoDecoderName);
         statsForNerds.setAudioDecoder(audioDecoderName);
         statsForNerds.setProcessing(buildProcessingInfo());
+        statsForNerds.setTunneling(mPrefs.tunneling);
+        statsForNerds.setBackBufferSeconds(mPrefs.bufferBack);
+        statsForNerds.setMediaSizeBytes(mediaSizeBytes);
     }
 
     /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
@@ -1498,27 +1503,39 @@ public class PlayerActivity extends Activity {
         }
     }
 
-    // "What the app is doing to the video to get it playing."
+    // "What the app is actively doing to the stream." Null (suppressed) unless really converting.
     private String buildProcessingInfo() {
-        final List<String> parts = new ArrayList<>();
         final Integer convertedFrom = DolbyVisionConversionStats.getLastSourceProfile();
         if (convertedFrom != null && DoviBridge.getConversionSuccessCount() > 0) {
             final Integer mode = DolbyVisionConversionStats.getLastSelectedConversionMode();
-            parts.add("DV" + convertedFrom + "→8.1 converting"
+            return "DV" + convertedFrom + "→8.1 converting"
                     + (mode != null ? " (mode " + mode + ")" : "")
-                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs");
-        } else if (dv7to81ConversionActive()) {
-            parts.add("DV7→8.1 armed");
-        } else if (mPrefs.mapDV7ToHevc) {
-            parts.add("DV7→HDR10 fallback");
+                    + ", " + DoviBridge.getConversionSuccessCount() + " RPUs";
         }
-        if (mPrefs.tunneling) {
-            parts.add("tunneling");
+        return null;
+    }
+
+    private long computeMediaSizeBytes(android.net.Uri uri) {
+        if (uri == null) {
+            return -1;
         }
-        if (parts.isEmpty()) {
-            return "direct play (no conversion)";
+        try (android.os.ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
+            if (pfd != null) {
+                long sz = pfd.getStatSize();
+                if (sz > 0) {
+                    return sz;
+                }
+            }
+        } catch (Exception ignored) {
+            // fall through to file-scheme attempt
         }
-        return TextUtils.join(", ", parts);
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+            long len = new java.io.File(uri.getPath()).length();
+            if (len > 0) {
+                return len;
+            }
+        }
+        return -1;
     }
 
     private void savePlayer() {

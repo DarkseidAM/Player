@@ -272,6 +272,7 @@ public final class DolbyVisionExtractorsFactory implements ExtractorsFactory {
             Format outFormat = format;
             if (converting) {
                 DolbyVisionConversionStats.recordSourceProfile(profile);
+                DolbyVisionConversionStats.recordSourceCodec(format.codecs);
                 String rewritten = rewriteDvCodecString(format.codecs);
                 if (rewritten != null && !rewritten.equals(format.codecs)) {
                     outFormat = format.buildUpon().setCodecs(rewritten).build();
