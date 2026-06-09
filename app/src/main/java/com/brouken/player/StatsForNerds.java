@@ -116,7 +116,8 @@ class StatsForNerds extends DebugTextViewHelper {
         }
         row(sb, "Video", v.toString());
 
-        row(sb, "HDR", hdrLabel(f) + "   " + colorLabel(f));
+        String color = colorLabel(f);
+        row(sb, "HDR", hdrLabel(f) + (color.isEmpty() ? "" : "   " + color));
 
         String dec = decoderLabel(videoDecoder);
         if (tunneling) {

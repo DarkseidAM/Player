@@ -1443,10 +1443,10 @@ public class PlayerActivity extends Activity {
             mediaSizeExecutor.execute(() -> {
                 final long size = computeMediaSizeBytes(contentResolver, sizeUri);
                 final PlayerActivity activity = activityRef.get();
-                if (activity != null && !activity.isFinishing()) {
+                if (activity != null && !activity.isFinishing() && !activity.isDestroyed()) {
                     activity.runOnUiThread(() -> {
                         final PlayerActivity act = activityRef.get();
-                        if (act != null && sizeUri.equals(act.mPrefs.mediaUri)) {
+                        if (act != null && !act.isDestroyed() && sizeUri.equals(act.mPrefs.mediaUri)) {
                             act.mediaSizeBytes = size;
                             if (act.statsForNerds != null) {
                                 act.statsForNerds.setMediaSizeBytes(size);
@@ -1579,9 +1579,13 @@ public class PlayerActivity extends Activity {
                 // give up
             }
         } else if ("file".equals(scheme) && uri.getPath() != null) {
-            long len = new java.io.File(uri.getPath()).length();
-            if (len > 0) {
-                return len;
+            try {
+                long len = new java.io.File(uri.getPath()).length();
+                if (len > 0) {
+                    return len;
+                }
+            } catch (Exception ignored) {
+                // inaccessible path → fall through
             }
         }
         return -1;
