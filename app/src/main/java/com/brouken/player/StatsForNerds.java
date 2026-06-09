@@ -10,6 +10,7 @@ import androidx.media3.common.Format;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.upstream.BandwidthMeter;
 import androidx.media3.exoplayer.util.DebugTextViewHelper;
 
 import com.brouken.player.dv.DolbyVisionConversionStats;
@@ -39,6 +40,8 @@ class StatsForNerds extends DebugTextViewHelper {
     private boolean tunneling;
     private int backBufferSeconds;
     private long mediaSizeBytes = -1;
+    private boolean network;
+    @Nullable private BandwidthMeter bandwidthMeter;
 
     StatsForNerds(ExoPlayer player, TextView textView) {
         super(player, textView);
@@ -67,6 +70,14 @@ class StatsForNerds extends DebugTextViewHelper {
 
     void setMediaSizeBytes(long mediaSizeBytes) {
         this.mediaSizeBytes = mediaSizeBytes;
+    }
+
+    void setNetwork(boolean network) {
+        this.network = network;
+    }
+
+    void setBandwidthMeter(@Nullable BandwidthMeter bandwidthMeter) {
+        this.bandwidthMeter = bandwidthMeter;
     }
 
     @Override
@@ -192,6 +203,13 @@ class StatsForNerds extends DebugTextViewHelper {
                 aheadMs / 1000, backBufferSeconds, speed));
         long dur = player.getDuration();
         row(sb, "Time", formatTime(pos) + " / " + (dur == C.TIME_UNSET ? "—" : formatTime(dur)));
+        // Measured network throughput (connection speed) — only meaningful for network streams.
+        if (network && bandwidthMeter != null) {
+            long bps = bandwidthMeter.getBitrateEstimate();
+            if (bps > 0) {
+                row(sb, "Net", String.format(Locale.US, "~%.1f Mbps (measured)", bps / 1_000_000f));
+            }
+        }
     }
 
     private void appendProcessing(StringBuilder sb) {

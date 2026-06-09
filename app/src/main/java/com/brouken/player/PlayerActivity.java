@@ -1517,6 +1517,9 @@ public class PlayerActivity extends Activity {
         statsForNerds.setTunneling(mPrefs.tunneling);
         statsForNerds.setBackBufferSeconds(mPrefs.bufferBack);
         statsForNerds.setMediaSizeBytes(mediaSizeBytes);
+        statsForNerds.setNetwork(Utils.isSupportedNetworkUri(mPrefs.mediaUri));
+        statsForNerds.setBandwidthMeter(
+                androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(this));
     }
 
     /** Whether DV7→8.1 conversion should run for this playback (auto = only when device needs it). */
