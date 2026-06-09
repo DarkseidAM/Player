@@ -1427,19 +1427,26 @@ public class PlayerActivity extends Activity {
         videoDecoderName = null;
         audioDecoderName = null;
         // Resolve media size off the main thread — content/SAF queries can be slow (cloud providers).
+        // Use the application ContentResolver + a WeakReference so a slow query can't retain the Activity.
         mediaSizeBytes = -1;
         final Uri sizeUri = mPrefs.mediaUri;
         if (sizeUri != null) {
+            final android.content.ContentResolver contentResolver = getApplicationContext().getContentResolver();
+            final java.lang.ref.WeakReference<PlayerActivity> activityRef = new java.lang.ref.WeakReference<>(this);
             new Thread(() -> {
-                final long size = computeMediaSizeBytes(sizeUri);
-                runOnUiThread(() -> {
-                    if (sizeUri.equals(mPrefs.mediaUri)) {
-                        mediaSizeBytes = size;
-                        if (statsForNerds != null) {
-                            statsForNerds.setMediaSizeBytes(size);
+                final long size = computeMediaSizeBytes(contentResolver, sizeUri);
+                final PlayerActivity activity = activityRef.get();
+                if (activity != null && !activity.isFinishing()) {
+                    activity.runOnUiThread(() -> {
+                        final PlayerActivity act = activityRef.get();
+                        if (act != null && sizeUri.equals(act.mPrefs.mediaUri)) {
+                            act.mediaSizeBytes = size;
+                            if (act.statsForNerds != null) {
+                                act.statsForNerds.setMediaSizeBytes(size);
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }, "media-size").start();
         }
         if (statsOverlay != null) {
@@ -1530,14 +1537,14 @@ public class PlayerActivity extends Activity {
         return null;
     }
 
-    private long computeMediaSizeBytes(android.net.Uri uri) {
+    private static long computeMediaSizeBytes(android.content.ContentResolver contentResolver, android.net.Uri uri) {
         if (uri == null) {
             return -1;
         }
         final String scheme = uri.getScheme();
         if ("content".equals(scheme)) {
             // Cheap metadata query first; avoids forcing a download on cloud-backed providers.
-            try (android.database.Cursor cursor = getContentResolver().query(
+            try (android.database.Cursor cursor = contentResolver.query(
                     uri, new String[]{android.provider.OpenableColumns.SIZE}, null, null, null)) {
                 if (cursor != null && cursor.moveToFirst()) {
                     int idx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
@@ -1551,7 +1558,7 @@ public class PlayerActivity extends Activity {
             } catch (Exception ignored) {
                 // fall through to fd
             }
-            try (android.os.ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "r")) {
+            try (android.os.ParcelFileDescriptor pfd = contentResolver.openFileDescriptor(uri, "r")) {
                 if (pfd != null) {
                     long sz = pfd.getStatSize();
                     if (sz > 0) {
