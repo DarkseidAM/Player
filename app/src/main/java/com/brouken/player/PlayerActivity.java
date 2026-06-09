@@ -175,6 +175,13 @@ public class PlayerActivity extends Activity {
     private TextView statsOverlay;
     private StatsForNerds statsForNerds;
     private boolean statsVisible;
+    // Shared single daemon thread for media-size queries (no per-playback thread churn).
+    private static final java.util.concurrent.ExecutorService mediaSizeExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "media-size");
+                t.setDaemon(true);
+                return t;
+            });
     private long mediaSizeBytes = -1;
     private String videoDecoderName;
     private String audioDecoderName;
@@ -1433,7 +1440,7 @@ public class PlayerActivity extends Activity {
         if (sizeUri != null) {
             final android.content.ContentResolver contentResolver = getApplicationContext().getContentResolver();
             final java.lang.ref.WeakReference<PlayerActivity> activityRef = new java.lang.ref.WeakReference<>(this);
-            new Thread(() -> {
+            mediaSizeExecutor.execute(() -> {
                 final long size = computeMediaSizeBytes(contentResolver, sizeUri);
                 final PlayerActivity activity = activityRef.get();
                 if (activity != null && !activity.isFinishing()) {
@@ -1447,7 +1454,7 @@ public class PlayerActivity extends Activity {
                         }
                     });
                 }
-            }, "media-size").start();
+            });
         }
         if (statsOverlay != null) {
             statsForNerds = new StatsForNerds(player, statsOverlay);
